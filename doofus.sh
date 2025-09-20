@@ -37,6 +37,35 @@ ensure_running() {
     fi
 }
 
+# Function to find and focus Firefox window
+focus_firefox() {
+    # Try to find Firefox window
+    local firefox_window=$(docker exec "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool search --onlyvisible --class firefox" 2>/dev/null | head -1)
+    
+    if [ -n "$firefox_window" ]; then
+        echo "Focusing Firefox window: $firefox_window"
+        docker exec "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool windowactivate $firefox_window"
+        sleep 0.5  # Give time for focus to take effect
+        return 0
+    else
+        echo "Firefox window not found. Starting Firefox..."
+        docker exec "$CONTAINER_NAME" bash -c "DISPLAY=:1 firefox &" >/dev/null 2>&1
+        sleep 3  # Give Firefox time to start
+        
+        # Try again to find the window
+        firefox_window=$(docker exec "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool search --onlyvisible --class firefox" 2>/dev/null | head -1)
+        if [ -n "$firefox_window" ]; then
+            echo "Focusing new Firefox window: $firefox_window"
+            docker exec "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool windowactivate $firefox_window"
+            sleep 0.5
+            return 0
+        else
+            echo "Warning: Could not find or start Firefox window"
+            return 1
+        fi
+    fi
+}
+
 # Function to build the image
 build_image() {
     if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
@@ -183,6 +212,67 @@ case "$1" in
         docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key '$keys'"
         ;;
         
+    "browser")
+        if [ $# -lt 2 ]; then
+            echo "Error: 'browser' command requires an action"
+            echo "Usage: $0 browser [action] [args...]"
+            echo "Actions:"
+            echo "  focus                    - Focus Firefox window (starts if not running)"
+            echo "  address [url]           - Navigate to address bar and optionally type URL"
+            echo "  type [text]             - Type text with Firefox focused"
+            echo "  press [keys]            - Press keys with Firefox focused"
+            exit 1
+        fi
+        action="$2"
+        shift 2  # Remove 'browser' and action from arguments
+        
+        ensure_running
+        
+        case "$action" in
+            "focus")
+                focus_firefox
+                ;;
+            "address")
+                focus_firefox
+                if [ $# -gt 0 ]; then
+                    url="$*"
+                    echo "Navigating to: $url"
+                    docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key ctrl+l"
+                    sleep 0.3
+                    docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool type --delay 50 '$url'"
+                    docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key Return"
+                else
+                    echo "Focusing address bar"
+                    docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key ctrl+l"
+                fi
+                ;;
+            "type")
+                if [ $# -lt 1 ]; then
+                    echo "Error: browser type requires text to type"
+                    exit 1
+                fi
+                text="$*"
+                focus_firefox
+                echo "Typing in Firefox: $text"
+                docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool type --delay 50 '$text'"
+                ;;
+            "press")
+                if [ $# -lt 1 ]; then
+                    echo "Error: browser press requires key(s) to press"
+                    exit 1
+                fi
+                keys="$*"
+                focus_firefox
+                echo "Pressing keys in Firefox: $keys"
+                docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key '$keys'"
+                ;;
+            *)
+                echo "Unknown browser action: $action"
+                exit 1
+                ;;
+        esac
+        ;;
+        
     "type")
         if [ $# -lt 2 ]; then
             echo "Error: 'type' command requires text to type"
@@ -251,6 +341,7 @@ case "$1" in
         echo "  move [x] [y]                  - Move cursor to normalized coordinates (0.0-1.0)"
         echo "  press [key(s)]                - Simulate pressing keys (e.g., 'ctrl+l', 'alt+Tab')"
         echo "  type [text]                   - Type text using keyboard simulation with proper delays"
+        echo "  browser [action] [args]       - Firefox-focused automation (focus, address, type, press)"
         echo "  translate [x] [y]             - Translate normalized coordinates to pixels"
         echo "  screenshot [filename]         - Take screenshot with cursor visible (default: screenshot.png)"
         echo "  screenfilm [filename] [mins]  - Create web-compatible MP4 from last N minutes (default: screenfilm.mp4, 2 mins)"
