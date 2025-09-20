@@ -24,7 +24,7 @@ The doofus.sh drives everything from building and running the Docker image to ex
 
 The Doofus docker image is built based on Ubuntu 24.04 with the following pre-installed:
 
-- Chromium Web Browser
+- Firefox Web Browser (installed via Mozillateam PPA to avoid snap in containers)
 - FFMPEG: continually recording the desktop
 - xdotool: automating mouse and keyboard interaction
 - xvfb: X Windows virtual frame buffer display
@@ -33,6 +33,24 @@ The Doofus docker image is built based on Ubuntu 24.04 with the following pre-in
 - NoVNC and TigerVNC: remote viewing
 - XFCE4: desktop window manager
 
+## Screenshots
+
+The `take_screenshot.sh` script is included in the container and provides reliable screenshot functionality. It tries multiple screenshot tools in order of preference (scrot, xfce4-screenshooter, ImageMagick's import) and automatically creates the necessary directory structure.
+
+Screenshots taken via the `doofus.sh screenshot` command are saved to the host machine with the specified filename (default: screenshot.png).
+
 ## Screen Recording
 
 FFMPEG is configured to record the desktop continually while the container is running to be able to observe what has happened while driving the automation. This is setup to create a new video every 60 seconds and delete videos older than 1 hour.
+
+## Troubleshooting
+
+**Firefox fails to launch:**
+- Ensure the container has started properly with XFCE4 desktop environment
+- Check that dbus-x11 is installed (included in the image)
+- Verify DISPLAY environment variable is set to :1
+
+**Screenshots fail:**
+- The image includes scrot as the primary screenshot tool
+- Fallbacks include xfce4-screenshooter and ImageMagick's import command
+- Ensure the container is running with display :1 active

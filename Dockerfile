@@ -7,46 +7,52 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Install system dependencies and Chromium
-RUN apt-get update && apt-get install -y \
-    wget \
-    curl \
-    gnupg2 \
-    ca-certificates \
-    apt-transport-https \
-    software-properties-common \
-    xvfb \
-    x11vnc \
-    tigervnc-standalone-server \
-    tigervnc-common \
-    xfce4 \
-    xfce4-terminal \
-    dbus-x11 \
-    supervisor \
-    novnc \
-    websockify \
-    imagemagick \
-    xdotool \
-    scrot \
-    ffmpeg \
-    dmz-cursor-theme \
-    xcursor-themes \
-    chromium-browser \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies and Firefox
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        wget \
+        curl \
+        gnupg2 \
+        ca-certificates \
+        apt-transport-https \
+        software-properties-common && \
+    add-apt-repository -y ppa:mozillateam/ppa && \
+    printf 'Package: firefox\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001\n' | tee /etc/apt/preferences.d/mozillateamppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        xvfb \
+        x11vnc \
+        tigervnc-standalone-server \
+        tigervnc-common \
+        xfce4 \
+        xfce4-terminal \
+        dbus-x11 \
+        supervisor \
+        novnc \
+        websockify \
+        imagemagick \
+        xdotool \
+        scrot \
+        ffmpeg \
+        dmz-cursor-theme \
+        xcursor-themes \
+        firefox && \
+    update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox 200 && \
+    update-alternatives --set x-www-browser /usr/bin/firefox && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set cursor environment variables globally for large, visible cursor
 ENV XCURSOR_THEME=DMZ-White
 ENV XCURSOR_SIZE=48
 ENV DISPLAY=:1
+ENV BROWSER=firefox
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash doofus && \
     echo "doofus:doofus" | chpasswd
 
-# Set up VNC
+# Set up VNC (we'll use x11vnc's -passwd option instead of stored password)
 RUN mkdir -p /home/doofus/.vnc && \
-    echo "doofus" | vncpasswd -f > /home/doofus/.vnc/passwd && \
-    chmod 600 /home/doofus/.vnc/passwd && \
     chown -R doofus:doofus /home/doofus/.vnc
 
 # Create directories
@@ -59,7 +65,7 @@ RUN mkdir -p /home/doofus/.icons/default && \
     echo "Inherits=DMZ-White" >> /home/doofus/.icons/default/index.theme && \
     chown -R doofus:doofus /home/doofus/.icons
 
-# Configure XFCE4 to disable screensaver and set Chromium as default browser
+# Configure XFCE4 to disable screensaver and set Firefox as default browser
 RUN mkdir -p /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml && \
     chown -R doofus:doofus /home/doofus/.config
 
@@ -93,7 +99,7 @@ RUN cat > /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-mana
 </channel>
 POWER_EOF
 
-# Create XFCE4 panel configuration with Chromium pinned
+# Create XFCE4 panel configuration with Firefox pinned
 RUN cat > /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml << 'PANEL_EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-panel" version="1.0">
@@ -121,7 +127,7 @@ RUN cat > /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml 
     <property name="plugin-2" type="string" value="tasklist"/>
     <property name="plugin-3" type="string" value="launcher">
       <property name="items" type="array">
-        <value type="string" value="chromium-browser.desktop"/>
+        <value type="string" value="firefox.desktop"/>
       </property>
     </property>
     <property name="plugin-4" type="string" value="pager"/>
@@ -180,6 +186,11 @@ CURSOR_INIT_EOF
 RUN chmod +x /home/doofus/init_cursor.sh && \
     chown doofus:doofus /home/doofus/init_cursor.sh
 
+# Copy and set up screenshot script
+COPY take_screenshot.sh /home/doofus/take_screenshot.sh
+RUN chmod +x /home/doofus/take_screenshot.sh && \
+    chown doofus:doofus /home/doofus/take_screenshot.sh
+
 # Create supervisord configuration
 RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'SUPERVISOR_EOF'
 [supervisord]
@@ -195,7 +206,7 @@ stderr_logfile=/var/log/supervisor/xvfb.log
 priority=100
 
 [program:x11vnc]
-command=x11vnc -display :1 -nopw -listen localhost -xkb -ncache 10 -ncache_cr -forever -shared
+command=x11vnc -display :1 -passwd doofus -listen localhost -xkb -ncache 10 -ncache_cr -forever -shared
 autorestart=true
 stdout_logfile=/var/log/supervisor/x11vnc.log
 stderr_logfile=/var/log/supervisor/x11vnc.log
