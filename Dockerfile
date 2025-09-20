@@ -177,7 +177,7 @@ stderr_logfile=/var/log/supervisor/xvfb.log
 priority=100
 
 [program:x11vnc]
-command=x11vnc -display :1 -passwd doofus -listen localhost -xkb -ncache 10 -ncache_cr -forever -shared
+command=x11vnc -display :1 -passwd doofus -listen localhost -xkb -ncache 10 -ncache_cr -forever -shared -nocursorshape -cursor arrow
 autorestart=true
 stdout_logfile=/var/log/supervisor/x11vnc.log
 stderr_logfile=/var/log/supervisor/x11vnc.log
