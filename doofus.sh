@@ -207,7 +207,7 @@ case "$1" in
         filename="${2:-screenshot.png}"
         echo "Taking screenshot: $filename"
         ensure_running
-        docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 scrot -p -z /home/doofus/screenshots/temp_screenshot.png"
+        docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenshot.sh /home/doofus/screenshots/temp_screenshot.png
         docker cp "$CONTAINER_NAME:/home/doofus/screenshots/temp_screenshot.png" "$filename"
         echo "Screenshot saved as $filename"
         ;;
