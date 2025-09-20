@@ -308,11 +308,11 @@ case "$1" in
         
     "screenfilm")
         filename="${2:-screenfilm.mp4}"
-        duration="${3:-2}"  # Default 2 minutes
-        echo "Creating screenfilm from last $duration minutes: $filename"
+        duration="${3:-90}"  # Default 90 seconds (1.5 minutes)
+        echo "Creating screenfilm from last $duration seconds: $filename"
         ensure_running
         
-        # Use the container script to create web-compatible MP4
+        # Use the container script to create web-compatible MP4 with active buffer
         docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenfilm.sh /home/doofus/temp_screenfilm.mp4 "$duration"
         
         # Copy the result to host
@@ -344,7 +344,7 @@ case "$1" in
         echo "  browser [action] [args]       - Firefox-focused automation (focus, address, type, press)"
         echo "  translate [x] [y]             - Translate normalized coordinates to pixels"
         echo "  screenshot [filename]         - Take screenshot with cursor visible (default: screenshot.png)"
-        echo "  screenfilm [filename] [mins]  - Create web-compatible MP4 from last N minutes (default: screenfilm.mp4, 2 mins)"
+        echo "  screenfilm [filename] [secs]  - Create web-compatible MP4 from last N seconds including active buffer (default: screenfilm.mp4, 90s)"
         echo "  logs                          - View container logs"
         echo ""
         echo "Access:"

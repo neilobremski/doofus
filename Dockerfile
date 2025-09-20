@@ -36,7 +36,9 @@ RUN apt-get update && \
         ffmpeg \
         dmz-cursor-theme \
         xcursor-themes \
-        firefox && \
+        firefox \
+        lsof \
+        bc && \
     update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox 200 && \
     update-alternatives --set x-www-browser /usr/bin/firefox && \
     rm -rf /var/lib/apt/lists/*
