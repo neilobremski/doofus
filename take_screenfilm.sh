@@ -1,100 +1,105 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: take_screenfilm.sh [output_filename.mp4] [duration_seconds]
-# Defaults: screenfilm.mp4, last 60 seconds
-# Captures the most recent 5-second segments for pseudo-live recording
-
-export DISPLAY=${DISPLAY:-:1}
-
-# Parameters
-output_file="${1:-/home/doofus/screenfilm.mp4}"
-duration_seconds="${2:-60}"  # Default 60 seconds
-
-recordings_dir="/home/doofus/recordings"
-playlist="$recordings_dir/segments.m3u8"
-temp_dir=$(mktemp -d)
-
-echo "Creating screenfilm from last $duration_seconds seconds using 5-second segments..."
-
-# Use the generated playlist to determine the most recent, completed segments
-# Fallback to plain ls if playlist doesn't exist yet
-
-# Determine how many segments are needed (roughly)
-needed_segments=$(( (duration_seconds + 4) / 5 ))
-
-# Build a list of "duration path" lines
-build_pairs() {
-  if [ -f "$playlist" ]; then
-    awk 'prev ~ /^#EXTINF:/ { d=prev; gsub(/^#EXTINF:/,"",d); gsub(",","",d); print d " " $0 } { prev=$0 }' "$playlist" | sed -E "s#([^ ]+) (.+)#\1 $recordings_dir/\2#"
-  else
-    for f in $(ls -t "$recordings_dir"/screen_*.mp4 2>/dev/null || true); do
-      [ -f "$f" ] || continue
-      dur=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$f" 2>/dev/null || echo 5)
-      echo "$dur $f"
-    done
-  fi
+usage() {
+  echo "Usage: $0 <output_mp4_path> <seconds>" >&2
+  exit 2
 }
 
-pairs_lines=$(build_pairs || true)
-if [ -z "$pairs_lines" ]; then
-  echo "No video recordings found. Container may have just started."
-  ffmpeg -y -f lavfi -i color=black:size=1024x768:duration=1 \
-    -c:v libx264 -profile:v baseline -level 3.0 -pix_fmt yuv420p -movflags +faststart \
-    "$output_file" 2>/dev/null
-  rm -rf "$temp_dir"
-  echo "Created placeholder screenfilm (no recordings available yet)"
+OUT="${1:-}"
+WANTED="${2:-}"
+
+[[ -z "${OUT}" || -z "${WANTED}" ]] && usage
+if ! [[ "${WANTED}" =~ ^[0-9]+$ ]] || (( WANTED <= 0 )); then
+  echo "Seconds must be a positive integer" >&2
+  exit 2
+fi
+
+REC_DIR="${SCREENFILM_DIR:-/home/doofus/recordings}"
+SEGMENT_SECONDS="${SCREENFILM_SEGMENT_SECONDS:-5}"
+SEGMENT_GLOB="${SCREENFILM_SEGMENT_GLOB:-*.mp4}"
+
+if [[ ! -d "${REC_DIR}" ]]; then
+  echo "Recordings directory not found: ${REC_DIR}" >&2
+  exit 1
+fi
+
+# Find segments, sorted chronologically by mtime (Linux compatible)
+mapfile -t ordered < <(
+  find "${REC_DIR}" -maxdepth 1 -type f -name "${SEGMENT_GLOB}" -exec stat -c "%Y %n" {} \; \
+  | sort -n \
+  | awk '{ $1=""; sub(/^ /,""); print }'
+)
+
+L=${#ordered[@]}
+if (( L == 0 )); then
+  echo "No segment files found in ${REC_DIR} matching ${SEGMENT_GLOB}" >&2
+  # Create a short placeholder video if no segments exist
+  if [[ "${OUT}" != /* ]]; then
+    mkdir -p "${REC_DIR}/exports"
+    OUT="${REC_DIR}/exports/${OUT}"
+  fi
+  mkdir -p "$(dirname "${OUT}")"
+  ffmpeg -hide_banner -loglevel error -y -f lavfi -i color=black:size=1024x768:duration=1 \
+    -c:v libx264 -preset veryfast -pix_fmt yuv420p -movflags +faststart "${OUT}"
+  echo "Created placeholder video (no recordings available yet): ${OUT}"
   exit 0
 fi
 
-# Take last N lines (most recent), then reverse to chronological order
-selected_lines=$(printf "%s\n" "$pairs_lines" | tail -n "$needed_segments")
-chronological=$(printf "%s\n" "$selected_lines" | tac)
+# How many 5s segments are needed to cover WANTED seconds
+need=$(( (WANTED + SEGMENT_SECONDS - 1) / SEGMENT_SECONDS ))
 
-# Prepare ffconcat list with per-file durations for debugging
-list_file=$(mktemp)
-echo "ffconcat version 1.0" > "$list_file"
-
-actual_total=0
-count=0
-
-echo "Segments to concatenate (duration seconds | size bytes | path):"
-# Build ffconcat list and debug lines; stop when enough seconds accumulated
-current_total=0
-printf "%s\n" "$chronological" | while read -r dur path; do
-  [ -f "$path" ] || continue
-  size=$(wc -c < "$path" 2>/dev/null || echo 0)
-  echo "  + $dur | $size | $path"
-  echo "file '$path'" >> "$list_file"
-  dur_int=${dur%.*}
-  if [ -z "$dur_int" ]; then dur_int=5; fi
-  current_total=$((current_total + dur_int))
-  # Write a stopper marker when we've hit our target window; the following awk will trim
-  if [ "$current_total" -ge "$duration_seconds" ]; then
-    echo "#STOP" >> "$list_file"
-    break
-  fi
-done
-# Trim list_file at STOP (if present) and compute counts
-if grep -q '^#STOP$' "$list_file"; then
-  awk '{print} /^#STOP$/ { exit }' "$list_file" > "$list_file.trim" && mv "$list_file.trim" "$list_file"
+# Take the last 'need' segments (chronological order retained)
+start=0
+if (( need < L )); then
+  start=$(( L - need ))
 fi
-count=$(grep -c '^file ' "$list_file" || true)
-# Approximate total seconds by counting segments (5s each) if playlist durations aren't trusted
-actual_total=$((count * 5))
+selected=( "${ordered[@]:${start}}" )
+K=${#selected[@]}
 
-echo "Concatenating $count segments for ~${actual_total}s total"
+total=$(( K * SEGMENT_SECONDS ))
+offset=0
+if (( total > WANTED )); then
+  offset=$(( total - WANTED ))  # Start this many seconds into the concat so we end "now"
+fi
 
-# Concatenate and re-encode to a web-friendly MP4
-ffmpeg -y -f concat -safe 0 -i "$list_file" \
-  -c:v libx264 -profile:v baseline -level 3.0 -pix_fmt yuv420p \
-  -movflags +faststart -crf 23 -preset medium \
-  "$output_file" 2>/dev/null || {
-  echo "Error: Failed to create screenfilm"
-  rm -f "$list_file"; rm -rf "$temp_dir"
-  exit 1
-}
+# If OUT is relative, place it under the recordings mount so the host can access it
+if [[ "${OUT}" != /* ]]; then
+  mkdir -p "${REC_DIR}/exports"
+  OUT="${REC_DIR}/exports/${OUT}"
+fi
+mkdir -p "$(dirname "${OUT}")"
 
-rm -f "$list_file"; rm -rf "$temp_dir"
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "${tmpdir}"' EXIT
+list="${tmpdir}/concat.txt"
+: > "${list}"
 
-echo "Screenfilm saved: $output_file (~${actual_total}s from $count segments)"
+# Build ffmpeg concat list, safely escaping single quotes
+for p in "${selected[@]}"; do
+  esc="${p//\'/\'\\\'\'}"
+  printf "file '%s'\n" "${esc}" >> "${list}"
+done
+
+# Concat and precisely trim to the last WANTED seconds.
+# -ss after -i for accurate seek, end aligned with newest frames because offset+WANTED = total
+ffmpeg -hide_banner -loglevel error \
+  -f concat -safe 0 -i "${list}" \
+  -ss "${offset}" -t "${WANTED}" \
+  -map 0:v:0 -map 0:a:0? \
+  -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+  -c:a aac -b:a 128k \
+  -movflags +faststart \
+  -y "${OUT}"
+
+# Optional: report duration if ffprobe exists
+if command -v ffprobe >/dev/null 2>&1; then
+  dur="$(ffprobe -v error -show_entries format=duration -of default=nokey=1:nokey=1:noprint_wrappers=1 "${OUT}" 2>/dev/null || true)"
+  if [[ -n "${dur}" ]]; then
+    printf "Wrote %s (%.2fs)\n" "${OUT}" "${dur}"
+  else
+    echo "Wrote ${OUT}"
+  fi
+else
+  echo "Wrote ${OUT}"
+fi
