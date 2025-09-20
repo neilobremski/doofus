@@ -55,24 +55,15 @@ You can install a global `doofus` command so you can run it from anywhere.
 
 Option A: Symlink (recommended)
 
-macOS (zsh):
-
 ```
-sudo ln -sf "$HOME/repos/doofus/doofus.sh" /usr/local/bin/doofus
-chmod +x "$HOME/repos/doofus/doofus.sh"
-```
-
-Linux:
-```
-sudo ln -sf "$HOME/repos/doofus/doofus.sh" /usr/local/bin/doofus
-chmod +x "$HOME/repos/doofus/doofus.sh"
+sudo ln -sf "doofus.sh" /usr/local/bin/doofus
 ```
 
 Option B: Shell alias
 
 Add this to your shell profile (~/.zshrc or ~/.bashrc):
 ```
-alias doofus="$HOME/repos/doofus/doofus.sh"
+alias doofus="doofus.sh"
 ```
 Then reload your shell: `source ~/.zshrc` or `source ~/.bashrc`.
 
