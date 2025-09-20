@@ -24,7 +24,7 @@ The doofus.sh drives everything from building and running the Docker image to ex
 
 The Doofus docker image is built based on Ubuntu 24.04 with the following pre-installed:
 
-- Firefox Web Browser (installed via Mozillateam PPA to avoid snap in containers)
+- Firefox Web Browser (installed via Mozillateam PPA to avoid snap in containers, available in Applications menu)
 - FFMPEG: continually recording the desktop
 - xdotool: automating mouse and keyboard interaction
 - xvfb: X Windows virtual frame buffer display
