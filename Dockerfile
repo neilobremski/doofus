@@ -155,6 +155,11 @@ COPY take_screenshot.sh /home/doofus/take_screenshot.sh
 RUN chmod +x /home/doofus/take_screenshot.sh && \
     chown doofus:doofus /home/doofus/take_screenshot.sh
 
+# Copy and set up screenfilm script
+COPY take_screenfilm.sh /home/doofus/take_screenfilm.sh
+RUN chmod +x /home/doofus/take_screenfilm.sh && \
+    chown doofus:doofus /home/doofus/take_screenfilm.sh
+
 # Create supervisord configuration
 RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'SUPERVISOR_EOF'
 [supervisord]

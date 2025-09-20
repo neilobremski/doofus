@@ -12,11 +12,11 @@ filename="${1:-temp_screenshot.png}"
 # Ensure the directory exists
 mkdir -p "$(dirname "$filename")"
 
-# Try different screenshot tools in order of preference
+# Try different screenshot tools in order of preference, always include cursor
 if command -v scrot >/dev/null 2>&1; then
-    scrot "$filename"
+    scrot --pointer "$filename"
 elif command -v xfce4-screenshooter >/dev/null 2>&1; then
-    xfce4-screenshooter -f -s "$filename"
+    xfce4-screenshooter -f -m -s "$filename"
 elif command -v import >/dev/null 2>&1; then
     import -window root "$filename"
 else

@@ -171,13 +171,16 @@ case "$1" in
         if [ $# -lt 2 ]; then
             echo "Error: 'press' command requires key(s) to press"
             echo "Usage: $0 press [key(s)]"
+            echo "Examples: $0 press ctrl+l, $0 press alt+Tab, $0 press Return"
             exit 1
         fi
         shift  # Remove 'press' from arguments
         keys="$*"
+        # Convert common key combinations to xdotool format
+        keys=$(echo "$keys" | sed 's/ctrl+/ctrl+/g' | sed 's/alt+/alt+/g' | sed 's/shift+/shift+/g')
         echo "Pressing keys: $keys"
         ensure_running
-        docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key $keys"
+        docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool key '$keys'"
         ;;
         
     "type")
@@ -190,7 +193,8 @@ case "$1" in
         text="$*"
         echo "Typing text: $text"
         ensure_running
-        docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool type '$text'"
+        # Add small delay and ensure proper typing with --delay option
+        docker exec -u doofus "$CONTAINER_NAME" bash -c "DISPLAY=:1 xdotool type --delay 50 '$text'"
         ;;
         
     "translate")
@@ -214,44 +218,16 @@ case "$1" in
         
     "screenfilm")
         filename="${2:-screenfilm.mp4}"
-        echo "Retrieving screen recordings: $filename"
+        duration="${3:-2}"  # Default 2 minutes
+        echo "Creating screenfilm from last $duration minutes: $filename"
         ensure_running
         
-        # Get the last 2 video files from the recordings directory
-        videos=$(docker exec -u doofus "$CONTAINER_NAME" bash -c "ls -t /home/doofus/recordings/screen_*.mp4 2>/dev/null | head -2" || echo "")
+        # Use the container script to create web-compatible MP4
+        docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenfilm.sh /home/doofus/temp_screenfilm.mp4 "$duration"
         
-        if [ -z "$videos" ]; then
-            echo "No screen recordings found."
-            exit 1
-        fi
+        # Copy the result to host
+        docker cp "$CONTAINER_NAME:/home/doofus/temp_screenfilm.mp4" "$filename"
         
-        echo "Found recordings: $videos"
-        
-        # Copy videos to temporary location
-        temp_dir=$(mktemp -d)
-        video_list=""
-        counter=1
-        
-        while IFS= read -r video; do
-            if [ -n "$video" ]; then
-                temp_file="$temp_dir/video_$counter.mp4"
-                docker cp "$CONTAINER_NAME:$video" "$temp_file"
-                video_list="$video_list -i $temp_file"
-                counter=$((counter + 1))
-            fi
-        done <<< "$videos"
-        
-        # Concatenate videos if we have multiple
-        if [ $counter -gt 2 ]; then
-            echo "Concatenating $(($counter - 1)) video segments..."
-            ffmpeg -y $video_list -filter_complex concat=n=$(($counter - 1)):v=1:a=0 "$filename" 2>/dev/null
-        else
-            # Just copy the single video
-            cp "$temp_dir/video_1.mp4" "$filename"
-        fi
-        
-        # Cleanup
-        rm -rf "$temp_dir"
         echo "Screen recording saved as $filename"
         ;;
         
@@ -273,11 +249,11 @@ case "$1" in
         echo "  click [button]                 - Click mouse button (1=left, 2=middle, 3=right)"
         echo "  do [xdotool_args...]          - Execute xdotool with specified arguments"
         echo "  move [x] [y]                  - Move cursor to normalized coordinates (0.0-1.0)"
-        echo "  press [key(s)]                - Simulate pressing keys (e.g., 'ctrl+c')"
-        echo "  type [text]                   - Type text using keyboard simulation"
+        echo "  press [key(s)]                - Simulate pressing keys (e.g., 'ctrl+l', 'alt+Tab')"
+        echo "  type [text]                   - Type text using keyboard simulation with proper delays"
         echo "  translate [x] [y]             - Translate normalized coordinates to pixels"
-        echo "  screenshot [filename]         - Take screenshot (default: screenshot.png)"
-        echo "  screenfilm [filename]         - Get last 2 minutes of recording (default: screenfilm.mp4)"
+        echo "  screenshot [filename]         - Take screenshot with cursor visible (default: screenshot.png)"
+        echo "  screenfilm [filename] [mins]  - Create web-compatible MP4 from last N minutes (default: screenfilm.mp4, 2 mins)"
         echo "  logs                          - View container logs"
         echo ""
         echo "Access:"
