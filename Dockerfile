@@ -114,19 +114,19 @@ export DISPLAY=:1
 # Create recordings directory
 mkdir -p /home/doofus/recordings
 
-# Start continuous screen recording with 60-second segments
+# Start continuous screen recording with 5-second segments for pseudo-live capture
 ffmpeg -y -f x11grab -r 10 -s 1024x768 -i :1.0 \
   -c:v libx264 -preset ultrafast -crf 23 \
-  -f segment -segment_time 60 -segment_format mp4 \
+  -f segment -segment_time 5 -segment_format mp4 \
   -segment_list /home/doofus/recordings/segments.m3u8 \
   -segment_list_flags +live \
   -reset_timestamps 1 \
   /home/doofus/recordings/screen_%03d.mp4 &
 
-# Cleanup old recordings (older than 1 hour)
+# Cleanup old recordings (keep last 10 minutes with 5-second segments)
 while true; do
-  sleep 300  # Check every 5 minutes
-  find /home/doofus/recordings -name "screen_*.mp4" -mtime +0.04 -delete 2>/dev/null || true
+  sleep 60  # Check every minute
+  find /home/doofus/recordings -name "screen_*.mp4" -mmin +10 -delete 2>/dev/null || true
 done &
 FFMPEG_EOF
 

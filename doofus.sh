@@ -308,7 +308,7 @@ case "$1" in
         
     "screenfilm")
         filename="${2:-screenfilm.mp4}"
-        duration="${3:-90}"  # Default 90 seconds (1.5 minutes)
+        duration="${3:-60}"  # Default 60 seconds
         echo "Creating screenfilm from last $duration seconds: $filename"
         ensure_running
         
@@ -344,7 +344,7 @@ case "$1" in
         echo "  browser [action] [args]       - Firefox-focused automation (focus, address, type, press)"
         echo "  translate [x] [y]             - Translate normalized coordinates to pixels"
         echo "  screenshot [filename]         - Take screenshot with cursor visible (default: screenshot.png)"
-        echo "  screenfilm [filename] [secs]  - Create web-compatible MP4 from last N seconds including active buffer (default: screenfilm.mp4, 90s)"
+        echo "  screenfilm [filename] [secs]  - Create web-compatible MP4 from last N seconds using 5s segments (default: screenfilm.mp4, 60s)"
         echo "  logs                          - View container logs"
         echo ""
         echo "Access:"
