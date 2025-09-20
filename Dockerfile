@@ -1,9 +1,5 @@
 FROM ubuntu:24.04
 
-# Use Docker's built-in architecture arguments
-ARG TARGETPLATFORM
-ARG TARGETARCH
-
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -11,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Install system dependencies
+# Install system dependencies and Chromium
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -32,14 +28,16 @@ RUN apt-get update && apt-get install -y \
     imagemagick \
     xdotool \
     scrot \
-    firefox \
+    ffmpeg \
     dmz-cursor-theme \
     xcursor-themes \
+    chromium-browser \
     && rm -rf /var/lib/apt/lists/*
 
-# Set cursor environment variables globally
+# Set cursor environment variables globally for large, visible cursor
 ENV XCURSOR_THEME=DMZ-White
 ENV XCURSOR_SIZE=48
+ENV DISPLAY=:1
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash doofus && \
@@ -51,9 +49,9 @@ RUN mkdir -p /home/doofus/.vnc && \
     chmod 600 /home/doofus/.vnc/passwd && \
     chown -R doofus:doofus /home/doofus/.vnc
 
-# Create screenshots directory
-RUN mkdir -p /home/doofus/screenshots && \
-    chown -R doofus:doofus /home/doofus/screenshots
+# Create directories
+RUN mkdir -p /home/doofus/screenshots /home/doofus/recordings && \
+    chown -R doofus:doofus /home/doofus/screenshots /home/doofus/recordings
 
 # Configure cursor theme for the doofus user
 RUN mkdir -p /home/doofus/.icons/default && \
@@ -61,22 +59,128 @@ RUN mkdir -p /home/doofus/.icons/default && \
     echo "Inherits=DMZ-White" >> /home/doofus/.icons/default/index.theme && \
     chown -R doofus:doofus /home/doofus/.icons
 
+# Configure XFCE4 to disable screensaver and set Chromium as default browser
+RUN mkdir -p /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    chown -R doofus:doofus /home/doofus/.config
+
+# Create XFCE4 screensaver configuration to disable screensaver/blank screen
+RUN cat > /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml << 'SCREENSAVER_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-screensaver" version="1.0">
+  <property name="saver" type="empty">
+    <property name="enabled" type="bool" value="false"/>
+    <property name="mode" type="int" value="0"/>
+  </property>
+  <property name="lock" type="empty">
+    <property name="enabled" type="bool" value="false"/>
+  </property>
+</channel>
+SCREENSAVER_EOF
+
+# Create XFCE4 power manager configuration to prevent screen blanking
+RUN cat > /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml << 'POWER_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-power-manager" version="1.0">
+  <property name="xfce4-power-manager" type="empty">
+    <property name="blank-on-ac" type="int" value="0"/>
+    <property name="blank-on-battery" type="int" value="0"/>
+    <property name="dpms-enabled" type="bool" value="false"/>
+    <property name="dpms-on-ac-sleep" type="uint" value="0"/>
+    <property name="dpms-on-ac-off" type="uint" value="0"/>
+    <property name="dpms-on-battery-sleep" type="uint" value="0"/>
+    <property name="dpms-on-battery-off" type="uint" value="0"/>
+  </property>
+</channel>
+POWER_EOF
+
+# Create XFCE4 panel configuration with Chromium pinned
+RUN cat > /home/doofus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml << 'PANEL_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-panel" version="1.0">
+  <property name="configver" type="int" value="2"/>
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <value type="int" value="2"/>
+  </property>
+  <property name="panel-1" type="empty">
+    <property name="position" type="string" value="p=6;x=0;y=0"/>
+    <property name="length" type="uint" value="100"/>
+    <property name="position-locked" type="bool" value="true"/>
+    <property name="size" type="uint" value="28"/>
+    <property name="plugin-ids" type="array">
+      <value type="int" value="1"/>
+      <value type="int" value="2"/>
+      <value type="int" value="3"/>
+      <value type="int" value="4"/>
+      <value type="int" value="5"/>
+      <value type="int" value="6"/>
+    </property>
+  </property>
+  <property name="plugins" type="empty">
+    <property name="plugin-1" type="string" value="applicationsmenu"/>
+    <property name="plugin-2" type="string" value="tasklist"/>
+    <property name="plugin-3" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="chromium-browser.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-4" type="string" value="pager"/>
+    <property name="plugin-5" type="string" value="clock"/>
+    <property name="plugin-6" type="string" value="systray"/>
+  </property>
+</channel>
+PANEL_EOF
+
+# Set ownership of config files
+RUN chown -R doofus:doofus /home/doofus/.config
+
+# Create FFMPEG recording script
+RUN cat > /home/doofus/start_recording.sh << 'FFMPEG_EOF'
+#!/bin/bash
+export DISPLAY=:1
+
+# Create recordings directory
+mkdir -p /home/doofus/recordings
+
+# Start continuous screen recording with 60-second segments
+ffmpeg -y -f x11grab -r 10 -s 1024x768 -i :1.0 \
+  -c:v libx264 -preset ultrafast -crf 23 \
+  -f segment -segment_time 60 -segment_format mp4 \
+  -segment_list /home/doofus/recordings/segments.m3u8 \
+  -segment_list_flags +live \
+  -reset_timestamps 1 \
+  /home/doofus/recordings/screen_%03d.mp4 &
+
+# Cleanup old recordings (older than 1 hour)
+while true; do
+  sleep 300  # Check every 5 minutes
+  find /home/doofus/recordings -name "screen_*.mp4" -mtime +0.04 -delete 2>/dev/null || true
+done &
+FFMPEG_EOF
+
+RUN chmod +x /home/doofus/start_recording.sh && \
+    chown doofus:doofus /home/doofus/start_recording.sh
+
 # Create cursor initialization script
 RUN cat > /home/doofus/init_cursor.sh << 'CURSOR_INIT_EOF'
 #!/bin/bash
 export DISPLAY=:1
 export XCURSOR_THEME=DMZ-White
 export XCURSOR_SIZE=48
+
+# Disable screensaver and DPMS
+xset s off
+xset s noblank
+xset -dpms
+
+# Set cursor
 xsetroot -cursor_name left_ptr 2>/dev/null || true
 CURSOR_INIT_EOF
 
 RUN chmod +x /home/doofus/init_cursor.sh && \
     chown doofus:doofus /home/doofus/init_cursor.sh
 
-# Update supervisord configuration to include cursor initialization
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Create an enhanced supervisord configuration
+# Create supervisord configuration
 RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'SUPERVISOR_EOF'
 [supervisord]
 nodaemon=true
@@ -88,12 +192,14 @@ command=Xvfb :1 -screen 0 1024x768x16
 autorestart=true
 stdout_logfile=/var/log/supervisor/xvfb.log
 stderr_logfile=/var/log/supervisor/xvfb.log
+priority=100
 
 [program:x11vnc]
 command=x11vnc -display :1 -nopw -listen localhost -xkb -ncache 10 -ncache_cr -forever -shared
 autorestart=true
 stdout_logfile=/var/log/supervisor/x11vnc.log
 stderr_logfile=/var/log/supervisor/x11vnc.log
+priority=200
 
 [program:xfce4]
 command=/bin/bash -c 'export DISPLAY=:1 XCURSOR_THEME=DMZ-White XCURSOR_SIZE=48 && xfce4-session'
@@ -102,29 +208,35 @@ stdout_logfile=/var/log/supervisor/xfce4.log
 stderr_logfile=/var/log/supervisor/xfce4.log
 user=doofus
 environment=HOME="/home/doofus",USER="doofus",DISPLAY=":1",XCURSOR_THEME="DMZ-White",XCURSOR_SIZE="48"
+priority=300
 
 [program:novnc]
 command=websockify --web=/usr/share/novnc/ 6080 localhost:5900
 autorestart=true
 stdout_logfile=/var/log/supervisor/novnc.log
 stderr_logfile=/var/log/supervisor/novnc.log
+priority=400
 
 [program:cursor_init]
 command=/home/doofus/init_cursor.sh
 autorestart=false
 startsecs=0
-startretries=1
+startretries=3
 stdout_logfile=/var/log/supervisor/cursor_init.log
 stderr_logfile=/var/log/supervisor/cursor_init.log
 user=doofus
 environment=HOME="/home/doofus",USER="doofus",DISPLAY=":1",XCURSOR_THEME="DMZ-White",XCURSOR_SIZE="48"
-priority=999
-SUPERVISOR_EOF
+priority=500
 
-# Set up the display
-ENV DISPLAY=:1
-ENV VNC_PORT=5901
-ENV NOVNC_PORT=6080
+[program:ffmpeg_recording]
+command=/home/doofus/start_recording.sh
+autorestart=true
+stdout_logfile=/var/log/supervisor/ffmpeg.log
+stderr_logfile=/var/log/supervisor/ffmpeg.log
+user=doofus
+environment=HOME="/home/doofus",USER="doofus",DISPLAY=":1"
+priority=600
+SUPERVISOR_EOF
 
 # Expose VNC and noVNC ports
 EXPOSE 5901 6080
@@ -133,15 +245,11 @@ EXPOSE 5901 6080
 USER doofus
 WORKDIR /home/doofus
 
-# Create startup script with cursor initialization
-COPY --chown=doofus:doofus start.sh /home/doofus/start.sh
-RUN chmod +x /home/doofus/start.sh
-
 # Add cursor environment to user's bash profile
 RUN echo "export XCURSOR_THEME=DMZ-White" >> /home/doofus/.bashrc && \
     echo "export XCURSOR_SIZE=48" >> /home/doofus/.bashrc && \
     echo "export DISPLAY=:1" >> /home/doofus/.bashrc
 
-# Start supervisor
+# Start supervisor as root
 USER root
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
