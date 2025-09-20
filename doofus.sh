@@ -7,6 +7,9 @@ set -e
 
 IMAGE_NAME="doofus"
 
+# Resolve the directory of this script so we can build from the repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Function to get container name (only 'run' command accepts custom name)
 get_container_name() {
     if [[ "$1" == "run" && -n "$2" ]]; then
@@ -70,7 +73,7 @@ focus_firefox() {
 build_image() {
     if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
         echo "Building Doofus image..."
-        docker build -t "$IMAGE_NAME" .
+        docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
     else
         echo "Image '$IMAGE_NAME' already exists."
     fi
@@ -125,12 +128,28 @@ translate_coords() {
 case "$1" in
     "build")
         echo "Building Doofus container..."
-        docker build -t "$IMAGE_NAME" .
+        docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
         ;;
         
     "run")
         CONTAINER_NAME=$(get_container_name "$1" "$2")
         echo "Running Doofus container with name '$CONTAINER_NAME'..."
+        start_container
+        ;;
+        
+    "restart")
+        echo "Restarting Doofus container (stop, remove, build, start)..."
+        # Stop if running
+        if container_running; then
+            docker stop "$CONTAINER_NAME" || true
+        fi
+        # Remove if exists
+        if container_exists; then
+            docker rm "$CONTAINER_NAME" || true
+        fi
+        # Build fresh image from repo directory
+        docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+        # Start
         start_container
         ;;
         
@@ -334,6 +353,7 @@ case "$1" in
         echo "  build                          - Build the Docker image"
         echo "  run [name]                     - Run container with optional name (default: doofus)"
         echo "  start                          - Build and start the container"
+        echo "  restart                        - Stop, remove, rebuild image, and start the container"
         echo "  stop                           - Stop the container"
         echo "  remove                         - Remove the container"
         echo "  click [button]                 - Click mouse button (1=left, 2=middle, 3=right)"

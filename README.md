@@ -13,10 +13,11 @@ The doofus.sh drives everything from building and running the Docker image to ex
 - move [x] [y]: move mouse cursor to coordinates expressed in the 0.0 to 1.0 range (translated to fixed screen coordinates)
 - press [key(s)]: simulate pressing special keys, like CTRL+C, etc.
 - remove: remove the Docker container
-- screenfilm [filename]: Retrieve the last 2 FFMPEG screen recordings (up to 2 minutes) and save them as [filename].
+- screenfilm [filename] [secs]: Create a web-friendly MP4 from the most recent 5s segments (default 60s) and save as [filename].
 - screenshot [filename]: Take a screenshot within the container and save it as [filename] which defaults to screenshot.png.
 - start: Build and run the Docker image as a container named "doofus". If it's already running then this will be a no-op.
 - stop: Stop the Docker container if it's running
+- restart: Stop, remove, rebuild the image, and start the container (useful after image changes)
 - translate [x] [y]: translate 0.0 to 1.0 coordinate values into screen coordinates for the container (`translate 1 1` would give you the desktop size)
 - type [text]: simulates a keyboard typing the [text] using xdotool
 
@@ -41,7 +42,41 @@ Screenshots taken via the `doofus.sh screenshot` command are saved to the host m
 
 ## Screen Recording
 
-FFMPEG is configured to record the desktop continually while the container is running to be able to observe what has happened while driving the automation. This is setup to create a new video every 60 seconds and delete videos older than 1 hour.
+FFMPEG records the desktop continually using 5-second segments (pseudo-live). The `screenfilm` command concatenates the most recent completed segments (from the ffmpeg playlist) and re-encodes them to a web-friendly MP4.
+
+- Segment duration: 5 seconds
+- Default capture window: 60 seconds (configurable)
+- Retention: last ~10 minutes of segments
+- Mouse cursor: rendered onto the desktop by x11vnc, so it appears in both screenshots and videos
+
+## Installation
+
+You can install a global `doofus` command so you can run it from anywhere.
+
+Option A: Symlink (recommended)
+
+macOS (zsh):
+
+```
+sudo ln -sf "$HOME/repos/doofus/doofus.sh" /usr/local/bin/doofus
+chmod +x "$HOME/repos/doofus/doofus.sh"
+```
+
+Linux:
+```
+sudo ln -sf "$HOME/repos/doofus/doofus.sh" /usr/local/bin/doofus
+chmod +x "$HOME/repos/doofus/doofus.sh"
+```
+
+Option B: Shell alias
+
+Add this to your shell profile (~/.zshrc or ~/.bashrc):
+```
+alias doofus="$HOME/repos/doofus/doofus.sh"
+```
+Then reload your shell: `source ~/.zshrc` or `source ~/.bashrc`.
+
+Note: The script now builds the Docker image from its own repository directory, so you can run `doofus` from any working directory.
 
 ## Troubleshooting
 
