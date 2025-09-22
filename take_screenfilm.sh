@@ -35,10 +35,6 @@ L=${#ordered[@]}
 if (( L == 0 )); then
   echo "No segment files found in ${REC_DIR} matching ${SEGMENT_GLOB}" >&2
   # Create a short placeholder video if no segments exist
-  if [[ "${OUT}" != /* ]]; then
-    mkdir -p "${REC_DIR}/exports"
-    OUT="${REC_DIR}/exports/${OUT}"
-  fi
   mkdir -p "$(dirname "${OUT}")"
   ffmpeg -hide_banner -loglevel error -y -f lavfi -i color=black:size=1024x768:duration=1 \
     -c:v libx264 -preset veryfast -pix_fmt yuv420p -movflags +faststart "${OUT}"
@@ -63,11 +59,7 @@ if (( total > WANTED )); then
   offset=$(( total - WANTED ))  # Start this many seconds into the concat so we end "now"
 fi
 
-# If OUT is relative, place it under the recordings mount so the host can access it
-if [[ "${OUT}" != /* ]]; then
-  mkdir -p "${REC_DIR}/exports"
-  OUT="${REC_DIR}/exports/${OUT}"
-fi
+# Always use the exact output path specified by the caller
 mkdir -p "$(dirname "${OUT}")"
 
 tmpdir="$(mktemp -d)"

@@ -13,7 +13,7 @@ The doofus.sh drives everything from building and running the Docker image to ex
 - move [x] [y]: move mouse cursor to coordinates expressed in the 0.0 to 1.0 range (translated to fixed screen coordinates)
 - press [key(s)]: simulate pressing special keys, like CTRL+C, etc.
 - remove: remove the Docker container
-- screenfilm [filename] [secs]: Create a precisely-timed MP4 from the last N seconds of screen activity (default 60s). Output files are saved to the host-accessible recordings/exports/ directory.
+- screenfilm [filename] [secs]: Create a precisely-timed MP4 from the last N seconds of screen activity (default 60s) and save as [filename].
 - screenshot [filename]: Take a screenshot within the container and save it as [filename] which defaults to screenshot.png.
 - start: Build and run the Docker image as a container named "doofus". If it's already running then this will be a no-op.
 - stop: Stop the Docker container if it's running
@@ -53,10 +53,12 @@ FFMPEG records the desktop continually using 5-second segments (pseudo-live). Th
 
 ### Volume Mapping for Recordings
 
-The recordings directory is now mapped to the host filesystem, allowing you to:
+The recordings directory is now mapped to the host filesystem for diagnostic purposes, allowing you to:
 - Inspect raw 5-second segments directly: `ls -la recordings/`
-- Access generated screenfilms at: `recordings/exports/filename.mp4`
 - Debug recording issues by examining segment files
+- Monitor the continuous recording process
+
+**Note**: The `screenfilm` command saves output files directly to the caller-specified filename (same as before). The volume mapping is purely for diagnostics and troubleshooting.
 
 Set the host recordings directory with the `DOOFUS_RECORDINGS_DIR` environment variable:
 ```bash

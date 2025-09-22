@@ -334,19 +334,13 @@ case "$1" in
         echo "Creating screenfilm from last $duration seconds: $filename"
         ensure_running
         
-        # Use the new container script that puts output in /home/doofus/recordings/exports
-        docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenfilm.sh "$filename" "$duration"
+        # Use the container script to create the screenfilm in a temp location
+        docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenfilm.sh "/home/doofus/temp_screenfilm.mp4" "$duration"
         
-        # With volume mapping, file is already accessible on host
-        RECORDINGS_DIR="${DOOFUS_RECORDINGS_DIR:-$PWD/recordings}"
-        if [[ "$filename" == /* ]]; then
-            # Absolute path - warn user if not in recordings mount
-            echo "Warning: Absolute path used. File may not be accessible on host unless it's in the recordings mount."
-            echo "Screen recording command completed: $filename"
-        else
-            # Relative path - file will be in exports subdirectory
-            echo "Screen recording saved as $RECORDINGS_DIR/exports/$filename"
-        fi
+        # Copy the result from container to host with the exact filename specified
+        docker cp "$CONTAINER_NAME:/home/doofus/temp_screenfilm.mp4" "$filename"
+        
+        echo "Screen recording saved as $filename"
         ;;
         
     "logs")
@@ -373,7 +367,7 @@ case "$1" in
         echo "  browser [action] [args]       - Firefox-focused automation (focus, address, type, press)"
         echo "  translate [x] [y]             - Translate normalized coordinates to pixels"
         echo "  screenshot [filename]         - Take screenshot with cursor visible (default: screenshot.png)"
-        echo "  screenfilm [filename] [secs]  - Create precisely-timed MP4 from last N seconds (default: screenfilm.mp4, 60s). Output saved to recordings/exports/"
+        echo "  screenfilm [filename] [secs]  - Create precisely-timed MP4 from last N seconds (default: screenfilm.mp4, 60s)"
         echo "  logs                          - View container logs"
         echo ""
         echo "Access:"
