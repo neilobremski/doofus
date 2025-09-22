@@ -13,7 +13,7 @@ The doofus.sh drives everything from building and running the Docker image to ex
 - move [x] [y]: move mouse cursor to coordinates expressed in the 0.0 to 1.0 range (translated to fixed screen coordinates)
 - press [key(s)]: simulate pressing special keys, like CTRL+C, etc.
 - remove: remove the Docker container
-- screenfilm [filename] [secs]: Create a web-friendly MP4 from the most recent 5s segments (default 60s) and save as [filename].
+- screenfilm [filename] [secs]: Create a precisely-timed MP4 from the last N seconds of screen activity (default 60s) and save as [filename].
 - screenshot [filename]: Take a screenshot within the container and save it as [filename] which defaults to screenshot.png.
 - start: Build and run the Docker image as a container named "doofus". If it's already running then this will be a no-op.
 - stop: Stop the Docker container if it's running
@@ -42,12 +42,31 @@ Screenshots taken via the `doofus.sh screenshot` command are saved to the host m
 
 ## Screen Recording
 
-FFMPEG records the desktop continually using 5-second segments (pseudo-live). The `screenfilm` command concatenates the most recent completed segments (from the ffmpeg playlist) and re-encodes them to a web-friendly MP4.
+FFMPEG records the desktop continually using 5-second segments (pseudo-live). The `screenfilm` command concatenates the most recent completed segments and creates precisely-timed MP4 files.
 
 - Segment duration: 5 seconds
 - Default capture window: 60 seconds (configurable)
 - Retention: last ~10 minutes of segments
 - Mouse cursor: rendered onto the desktop by x11vnc, so it appears in both screenshots and videos
+- **New**: Volume mapping exposes recordings directory to host for debugging
+- **Fixed**: Accurate duration trimming - output videos are exactly the requested length
+
+### Volume Mapping for Recordings
+
+The recordings directory is now mapped to the host filesystem for diagnostic purposes, allowing you to:
+- Inspect raw 5-second segments directly: `ls -la recordings/`
+- Debug recording issues by examining segment files
+- Monitor the continuous recording process
+
+**Note**: The `screenfilm` command saves output files directly to the caller-specified filename (same as before). The volume mapping is purely for diagnostics and troubleshooting.
+
+Set the host recordings directory with the `DOOFUS_RECORDINGS_DIR` environment variable:
+```bash
+export DOOFUS_RECORDINGS_DIR="$HOME/doofus-recordings"
+./doofus.sh start
+```
+
+Defaults to `./recordings` in the current directory.
 
 ## Installation
 

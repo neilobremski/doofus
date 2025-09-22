@@ -93,7 +93,10 @@ start_container() {
         docker start "$CONTAINER_NAME"
     else
         echo "Creating and starting new container '$CONTAINER_NAME'..."
-        docker run -d -p 5901:5901 -p 6080:6080 --name "$CONTAINER_NAME" "$IMAGE_NAME"
+        # Create recordings directory if it doesn't exist
+        RECORDINGS_DIR="${DOOFUS_RECORDINGS_DIR:-$PWD/recordings}"
+        mkdir -p "$RECORDINGS_DIR"
+        docker run -d -p 5901:5901 -p 6080:6080 -v "$RECORDINGS_DIR:/home/doofus/recordings" --name "$CONTAINER_NAME" "$IMAGE_NAME"
     fi
     
     echo "Container started!"
@@ -331,10 +334,10 @@ case "$1" in
         echo "Creating screenfilm from last $duration seconds: $filename"
         ensure_running
         
-        # Use the container script to create web-compatible MP4 with active buffer
-        docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenfilm.sh /home/doofus/temp_screenfilm.mp4 "$duration"
+        # Use the container script to create the screenfilm in a temp location
+        docker exec -u doofus "$CONTAINER_NAME" /home/doofus/take_screenfilm.sh "/home/doofus/temp_screenfilm.mp4" "$duration"
         
-        # Copy the result to host
+        # Copy the result from container to host with the exact filename specified
         docker cp "$CONTAINER_NAME:/home/doofus/temp_screenfilm.mp4" "$filename"
         
         echo "Screen recording saved as $filename"
@@ -364,7 +367,7 @@ case "$1" in
         echo "  browser [action] [args]       - Firefox-focused automation (focus, address, type, press)"
         echo "  translate [x] [y]             - Translate normalized coordinates to pixels"
         echo "  screenshot [filename]         - Take screenshot with cursor visible (default: screenshot.png)"
-        echo "  screenfilm [filename] [secs]  - Create web-compatible MP4 from last N seconds using 5s segments (default: screenfilm.mp4, 60s)"
+        echo "  screenfilm [filename] [secs]  - Create precisely-timed MP4 from last N seconds (default: screenfilm.mp4, 60s)"
         echo "  logs                          - View container logs"
         echo ""
         echo "Access:"
